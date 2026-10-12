@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wetter Lüneburg</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#f4f6f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11161c" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #f4f6f8; --card: #ffffff; --text: #1b2430; --muted: #6a7788; --accent: #2b6cb0; --border: #e1e6ec;
+    --sun: #f5a623; --moon-lit: #f1ecd6; --moon-dark: #4a5668;
+    --cloud: #c4cfdb; --cloud-dk: #8b99aa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11161c; --card: #1b232c; --text: #e8edf2; --muted: #93a1b1; --accent: #6aa9f0; --border: #2a3541;
+            --moon-dark: #2c3643; --cloud: #8493a5; --cloud-dk: #5d6b7c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: .85rem; margin-bottom: 16px; line-height: 1.4; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-width: 0; }
+  .card.wide { grid-column: 1 / -1; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .label { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  .value { font-size: 1.5rem; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .head .value { margin-top: 0; text-align: right; font-size: 1.05rem; }
+  .card.center { display: flex; flex-direction: column; justify-content: center; }
+  .metrics { display: flex; gap: 8px 22px; flex-wrap: wrap; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .metrics .mv { font-size: 1.45rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .unit { font-size: .95rem; font-weight: 400; color: var(--muted); margin-left: 3px; }
+  .small { font-size: .85rem; color: var(--muted); margin-top: 2px; }
+  .delta { text-align: right; font-size: .8rem; color: var(--muted); min-height: 1.1em; }
+  .row { display: flex; justify-content: space-between; gap: 12px; }
+  .row .value { font-size: 1.3rem; }
+  .row .r { text-align: right; }
+  .row .value span.day { font-size: .7rem; font-weight: 400; color: var(--muted); margin-left: 3px; }
+  .arrow { display: inline-block; transition: transform .4s; color: var(--accent); }
+
+  .iconrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  svg.ico { width: 52px; height: 52px; flex: none; overflow: visible; }
+  svg.ico.big { width: 76px; height: 76px; }
+
+  svg { display: block; width: 100%; height: auto; }
+  svg.ico { width: 52px; }
+  svg.ico.big { width: 76px; }
+  svg.spark { margin-top: 6px; }
+  .spark .line { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+  .spark .area { fill: var(--accent); opacity: .12; }
+  .spark .grid { stroke: var(--border); stroke-width: 1; }
+  .spark text { fill: var(--muted); font-size: 9px; }
+  .spark .dot { fill: var(--accent); }
+  .spark .bar { fill: var(--accent); opacity: .85; }
+
+  svg.sky { margin: 4px 0 2px; }
+  .sky .horizon { stroke: var(--border); stroke-width: 1.5; }
+  .sky .track { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: .6; }
+  .sky .glow { fill: var(--sun); opacity: .25; }
+  .sky .sun { fill: var(--sun); }
+  .moon-dark { fill: var(--moon-dark); stroke: var(--border); stroke-width: .8; }
+  .moon-lit { fill: var(--moon-lit); }
+  .dim { opacity: .45; }
+  .centered { text-align: center; }
+
+  /* Wetter-Icons */
+  .cloud { fill: var(--cloud); }
+  .cloud.dk { fill: var(--cloud-dk); }
+  .sunc { fill: var(--sun); }
+  .rays line { stroke: var(--sun); stroke-width: 2.5; stroke-linecap: round; }
+  .rays { animation: spin 28s linear infinite; }
+  .rd { stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; animation: fall 1s linear infinite; }
+  .flake { fill: var(--accent); animation: fall 2.6s linear infinite; }
+  .hail { fill: var(--muted); animation: fall 1.2s linear infinite; }
+  .bolt { fill: var(--sun); animation: flash 2.2s infinite; }
+  .fogl, .windl { fill: none; stroke: var(--muted); stroke-width: 3; stroke-linecap: round; animation: drift 4s ease-in-out infinite; }
+  .eye-ol { fill: none; stroke: var(--muted); stroke-width: 2.5; stroke-linejoin: round; }
+  .eye-pu { fill: var(--accent); }
+  .thermo-bg { fill: var(--muted); opacity: .3; }
+  .drop-bg { fill: var(--muted); opacity: .2; }
+  .drop-ol { fill: none; stroke: var(--muted); stroke-width: 2; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fall { 0% { transform: translateY(-3px); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(8px); opacity: 0; } }
+  @keyframes flash { 0%, 60%, 100% { opacity: .3; } 65%, 75% { opacity: 1; } 70% { opacity: .45; } }
+  @keyframes drift { 0%, 100% { transform: translateX(-3px); } 50% { transform: translateX(3px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .rays, .rd, .flake, .hail, .bolt, .fogl, .windl { animation: none; }
+  }
+
+  form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; align-items: center; font-size: .85rem; color: var(--muted); }
+  input { width: 90px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px;
+          background: var(--card); color: var(--text); }
+  button { padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--accent);
+           color: #fff; cursor: pointer; }
+  #status { margin-top: 12px; font-size: .85rem; color: var(--muted); }
+  #status.err { color: #d14343; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Wetter <span id="place">Lüneburg</span></h1>
+  <div class="sub" id="station">Lade Daten …</div>
+
+  <div class="grid">
+    <!-- Wetterzustand -->
+    <div class="card wide">
+      <div class="iconrow">
+        <div>
+          <div class="label">Wetterlage</div>
+          <div class="value" id="wxtext">–</div>
+          <div class="small" id="wxsub"></div>
+        </div>
+        <svg class="ico big" id="wxicon" viewBox="0 0 64 64"></svg>
+      </div>
+      <div class="metrics">
+        <div><div class="mv"><span id="wtemp">–</span><span class="unit">°C</span></div><div class="small">Temperatur</div></div>
+        <div><div class="mv"><span id="whum">–</span><span class="unit">%</span></div><div class="small">Luftfeuchtigkeit</div></div>
+        <div><div class="mv"><span id="wpres">–</span><span class="unit">hPa</span></div><div class="small">Luftdruck</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="label">Temperatur</div>
+        <div class="value"><span id="temp">–</span><span class="unit">°C</span></div></div>
+      <div class="delta" id="sp-temp-delta"></div>
+      <svg class="spark" id="sp-temp" viewBox="0 0 300 110"></svg>
+    </div>
+
+    <div class="card center">
+      <div class="iconrow">
+        <div>
+          <div class="label">Gefühlte Temperatur</div>
+          <div class="value"><span id="ftemp">–</span><span class="unit">°C</span></div>
+          <div class="small" id="ftempnote"></div>
+        </div>
+        <svg class="ico big" id="fticon" viewBox="0 0 64 64"></svg>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="label">Luftfeuchtigkeit</div>
+        <div class="value"><span id="hum">–</span><span class="unit">%</span></div></div>
+      <div class="delta" id="sp-hum-delta"></div>
+      <svg class="spark" id="sp-hum" viewBox="0 0 300 110"></svg>
+    </div>
+
+    <div class="card">
+      <div class="head"><div class="label">Luftdruck (auf NN)</div>
+        <div class="value"><span id="pres">–</span><span class="unit">hPa</span></div></div>
+      <div class="delta" id="sp-pres-delta"></div>
+      <div class="delta" id="ptrend"></div>
+      <svg class="spark" id="sp-pres" viewBox="0 0 300 110"></svg>
+    </div>
+
+    <div class="card">
+      <div class="label">Wind</div>
+      <div class="value"><span id="wspeed">–</span><span class="unit">km/h</span></div>
+      <div class="small"><span class="arrow" id="warrow">↑</span> <span id="wdir">–</span></div>
+    </div>
+
+    <div class="card">
+      <div class="iconrow">
+        <div>
+          <div class="label">Taupunkt</div>
+          <div class="value"><span id="dew">–</span><span class="unit">°C</span></div>
+          <div class="small" id="dewnote"></div>
+        </div>
+        <svg class="ico" id="dewicon" viewBox="0 0 64 64"></svg>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="iconrow">
+        <div>
+          <div class="label">Bewölkung</div>
+          <div class="value"><span id="cloud">–</span><span class="unit">%</span></div>
+          <div class="small" id="cloudnote"></div>
+        </div>
+        <svg class="ico" id="cloudicon" viewBox="0 0 64 64"></svg>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="iconrow">
+        <div>
+          <div class="label">Sichtweite</div>
+          <div class="value"><span id="vis">–</span><span class="unit">km</span></div>
+          <div class="small" id="visnote"></div>
+        </div>
+        <svg class="ico" id="visicon" viewBox="0 0 64 64"></svg>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <div class="iconrow">
+        <div>
+          <div class="label">Niederschlag (letzte Stunde)</div>
+          <div class="value"><span id="prec">–</span><span class="unit">mm</span></div>
+          <div class="small" id="precnote"></div>
+        </div>
+        <svg class="ico" id="precicon" viewBox="0 0 64 64"></svg>
+      </div>
+      <div class="delta" id="sp-prec-delta"></div>
+      <svg class="spark" id="sp-prec" viewBox="0 0 300 110"></svg>
+    </div>
+
+    <div class="card wide"><div class="label">Globalstrahlung</div>
+      <div class="value"><span id="rad">–</span><span class="unit">W/m²</span></div>
+      <div class="small" id="radnote">Mittelwert der letzten Stunde bzw. 10 Minuten</div></div>
+
+    <div class="card">
+      <div class="label">Sonne</div>
+      <svg class="sky" id="sunsvg" viewBox="0 0 200 100"></svg>
+      <div class="row">
+        <div><div class="small">Aufgang</div><div class="value" id="sunrise">–</div></div>
+        <div class="r"><div class="small">Untergang</div><div class="value" id="sunset">–</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Mond</div>
+      <svg class="sky" id="moonsvg" viewBox="0 0 200 100"></svg>
+      <div class="small centered" id="moonphase">–</div>
+      <div class="row">
+        <div><div class="small">Aufgang</div><div class="value" id="moonrise">–</div></div>
+        <div class="r"><div class="small">Untergang</div><div class="value" id="moonset">–</div></div>
+      </div>
+    </div>
+  </div>
+
+  <form id="loc">
+    <label>Breite <input id="lat" type="number" step="0.0001" value="53.25"></label>
+    <label>Länge <input id="lon" type="number" step="0.0001" value="10.41"></label>
+    <button type="submit">Aktualisieren</button>
+  </form>
+  <div id="status"></div>
+</main>
+
+<script src="suncalc.js"></script>
+<script>
+const TZ = "Europe/Berlin";
+let lastLoad = 0;
+const $ = id => document.getElementById(id);
+const isNum = v => v !== null && v !== undefined && !isNaN(v);
+const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+const num = (v, digits = 1) => !isNum(v) ? "–"
+  : Number(v).toLocaleString("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+const dayKey = d => d.toLocaleDateString("de-DE", { timeZone: TZ });
+const clockStr = d => d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
+
+// Uhrzeit als HTML; liegt der Zeitpunkt nicht heute, wird "morgen"/"gestern" ergänzt
+function timeHtml(d) {
+  if (!(d instanceof Date) || isNaN(d)) return "–";
+  const now = new Date();
+  let suffix = "";
+  if (dayKey(d) !== dayKey(now)) suffix = d > now ? "morgen" : "gestern";
+  return clockStr(d) + (suffix ? `<span class="day">${suffix}</span>` : "");
+}
+
+const COMPASS = ["N","NNO","NO","ONO","O","OSO","SO","SSO","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+const compass = deg => COMPASS[Math.round(deg / 22.5) % 16];
+
+function getCoords() {
+  let lat = parseFloat($("lat").value), lon = parseFloat($("lon").value);
+  if (isNaN(lat) || isNaN(lon)) { lat = 53.25; lon = 10.41; }
+  return { lat, lon };
+}
+
+/* ---------- Zeitachse (feste Uhrzeiten 0, 6, 12, 18 Uhr) ---------- */
+const hourFmt = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone: TZ });
+const hourOf = t => parseInt(hourFmt.format(new Date(t)), 10);
+
+function tickTimes(t0, t1) {
+  const H1 = 3600e3, out = [];
+  for (let t = Math.ceil(t0 / H1) * H1; t <= t1; t += H1) {
+    const h = hourOf(t);
+    if (h % 6 === 0) out.push({ t, h });
+  }
+  return out;
+}
+
+const CH = { W: 300, H: 110, L: 34, R: 6, T: 8, B: 18 };
+
+function chartScale(lastT) {
+  const t1 = Math.max(Date.now(), lastT || 0), t0 = t1 - 24 * 3600e3;
+  const X = t => CH.L + clamp((t - t0) / (t1 - t0), 0, 1) * (CH.W - CH.L - CH.R);
+  return { t0, t1, X };
+}
+
+function tickMarkup(X, t0, t1) {
+  let s = "";
+  for (const tt of tickTimes(t0, t1)) {
+    const x = X(tt.t).toFixed(1);
+    s += `<line class="grid" x1="${x}" x2="${x}" y1="${CH.T}" y2="${CH.H - CH.B}"/>` +
+         `<text x="${x}" y="${CH.H - 4}" text-anchor="middle">${tt.h}</text>`;
+  }
+  return s;
+}
+
+/* ---------- Verlaufsdiagramme (letzte 24 Stunden) ---------- */
+function drawSpark(id, pts, digits, unit) {
+  const svg = $(id), deltaEl = $(id + "-delta");
+  pts = pts.filter(p => isNum(p.v)).sort((a, b) => a.t - b.t);
+  if (pts.length < 2) { svg.innerHTML = ""; deltaEl.textContent = "Kein Verlauf verfügbar"; return; }
+
+  const { W, H, L, R, T, B } = CH;
+  const { t0, t1, X } = chartScale(pts[pts.length - 1].t);
+  const vals = pts.map(p => p.v);
+  let min = Math.min(...vals), max = Math.max(...vals);
+  if (max - min < 1e-9) { min -= .5; max += .5; }
+  const Y = v => T + (1 - (v - min) / (max - min)) * (H - T - B);
+
+  const line = pts.map((p, i) => (i ? "L" : "M") + X(p.t).toFixed(1) + " " + Y(p.v).toFixed(1)).join(" ");
+  const first = pts[0], last = pts[pts.length - 1];
+  const area = `${line} L${X(last.t).toFixed(1)} ${H - B} L${X(first.t).toFixed(1)} ${H - B} Z`;
+
+  svg.innerHTML = tickMarkup(X, t0, t1) +
+    `<line class="grid" x1="${L}" x2="${W - R}" y1="${T}" y2="${T}"/>` +
+    `<line class="grid" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>` +
+    `<text x="0" y="${T + 3}">${num(max, digits)}</text>` +
+    `<text x="0" y="${H - B + 3}">${num(min, digits)}</text>` +
+    `<path class="area" d="${area}"/><path class="line" d="${line}"/>` +
+    `<circle class="dot" cx="${X(last.t).toFixed(1)}" cy="${Y(last.v).toFixed(1)}" r="3"/>`;
+
+  const d = last.v - first.v;
+  const eps = Math.pow(10, -digits) / 2;
+  const sym = d > eps ? "▲ +" : d < -eps ? "▼ −" : "● ";
+  deltaEl.textContent = `${sym}${num(Math.abs(d), digits)} ${unit} in 24 h`;
+}
+
+// Säulendiagramm für stündlichen Niederschlag
+function drawBars(id, pts) {
+  const svg = $(id), deltaEl = $(id + "-delta");
+  pts = pts.filter(p => isNum(p.v)).sort((a, b) => a.t - b.t);
+  if (!pts.length) { svg.innerHTML = ""; deltaEl.textContent = "Kein Verlauf verfügbar"; return; }
+
+  const { W, H, L, R, T, B } = CH;
+  const { t0, t1, X } = chartScale(pts[pts.length - 1].t);
+  const top = Math.max(1, Math.ceil(Math.max(...pts.map(p => p.v))));
+  let bars = "";
+  for (const p of pts) {
+    if (p.v <= 0) continue;
+    const x0 = X(p.t - 3600e3), x1 = X(p.t);
+    const h = (p.v / top) * (H - T - B);
+    bars += `<rect class="bar" x="${x0.toFixed(1)}" y="${(H - B - h).toFixed(1)}" width="${Math.max(x1 - x0 - 1, 1).toFixed(1)}" height="${h.toFixed(1)}"/>`;
+  }
+  svg.innerHTML = tickMarkup(X, t0, t1) +
+    `<line class="grid" x1="${L}" x2="${W - R}" y1="${T}" y2="${T}"/>` +
+    `<line class="grid" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>` +
+    `<text x="0" y="${T + 3}">${top} mm</text><text x="0" y="${H - B + 3}">0</text>` + bars;
+
+  const sum = pts.filter(p => p.t > t0).reduce((s, p) => s + p.v, 0);
+  deltaEl.textContent = `Summe 24 h: ${num(sum, 1)} mm`;
+}
+
+function pressureTrend(pts) {
+  pts = pts.filter(p => isNum(p.v)).sort((a, b) => a.t - b.t);
+  const el = $("ptrend");
+  if (pts.length < 2) { el.textContent = ""; return; }
+  const last = pts[pts.length - 1];
+  const target = last.t - 3 * 3600e3;
+  let ref = pts[0];
+  for (const p of pts) if (Math.abs(p.t - target) < Math.abs(ref.t - target)) ref = p;
+  if (Math.abs(ref.t - target) > 90 * 60e3) { el.textContent = ""; return; }
+  const d = last.v - ref.v;
+  const text = d >= 3 ? "stark steigend" : d >= 1 ? "steigend" : d > -1 ? "gleichbleibend" : d > -3 ? "fallend" : "stark fallend";
+  const angle = clamp(d / 3 * 45, -90, 90);
+  el.innerHTML = `3 h: <span class="arrow" style="transform:rotate(${(-angle).toFixed(0)}deg)">→</span> ` +
+                 `${d > 0 ? "+" : d < 0 ? "−" : ""}${num(Math.abs(d), 1)} hPa · ${text}`;
+}
+
+async function loadHistory(lat, lon, cur) {
+  const end = new Date(), start = new Date(end.getTime() - 24 * 3600e3);
+  const url = `https://api.brightsky.dev/weather?lat=${lat}&lon=${lon}` +
+              `&date=${encodeURIComponent(start.toISOString())}&last_date=${encodeURIComponent(end.toISOString())}` +
+              `&tz=${encodeURIComponent(TZ)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Verlauf: HTTP " + res.status);
+  const data = await res.json();
+  const recs = (data.weather || []).map(w => ({ t: new Date(w.timestamp).getTime(), w }));
+  const hourly = recs.slice();
+  // aktuellsten Messwert anhängen, falls er neuer ist als der letzte Stundenwert
+  if (cur && cur.timestamp) {
+    const ct = new Date(cur.timestamp).getTime();
+    if (!recs.length || ct > recs[recs.length - 1].t) recs.push({ t: ct, w: cur });
+  }
+  const series = key => recs.map(r => ({ t: r.t, v: r.w[key] }));
+  drawSpark("sp-temp", series("temperature"), 1, "°C");
+  drawSpark("sp-hum", series("relative_humidity"), 0, "%");
+  drawSpark("sp-pres", series("pressure_msl"), 1, "hPa");
+  pressureTrend(series("pressure_msl"));
+  drawBars("sp-prec", hourly.map(r => ({ t: r.t, v: r.w.precipitation })));
+}
+
+/* ---------- Sonne & Mond ---------- */
+const SKY_W = 200, SKY_H = 100, HOR = 80, CX = 100, RX = 80, RY = 62;
+const skyPos = f => ({ x: CX - RX * Math.cos(Math.PI * f), y: HOR - RY * Math.sin(Math.PI * f) });
+const skyBase =
+  `<line class="horizon" x1="6" x2="194" y1="${HOR}" y2="${HOR}"/>` +
+  `<path class="track" d="M${CX - RX} ${HOR} A${RX} ${RY} 0 0 1 ${CX + RX} ${HOR}"/>`;
+
+function sunBody(f, dim) {
+  const p = skyPos(f);
+  return `<g class="${dim ? "dim" : ""}"><circle class="glow" cx="${p.x}" cy="${p.y}" r="14"/>` +
+         `<circle class="sun" cx="${p.x}" cy="${p.y}" r="8"/></g>`;
+}
+
+// Mondscheibe mit korrekter Phase (phase: 0 = Neumond, 0.5 = Vollmond, <0.5 zunehmend)
+function moonBody(cx, cy, r, phase, dim) {
+  const waxing = phase < 0.5, c = Math.cos(2 * Math.PI * phase);
+  const rx = Math.max(Math.abs(c) * r, 0.01);
+  const limb = waxing ? 1 : 0;
+  const term = waxing ? (c > 0 ? 0 : 1) : (c > 0 ? 1 : 0);
+  const top = `${cx} ${cy - r}`, bot = `${cx} ${cy + r}`;
+  const lit = `M${top} A${r} ${r} 0 0 ${limb} ${bot} A${rx} ${r} 0 0 ${term} ${top} Z`;
+  return `<g class="${dim ? "dim" : ""}"><circle class="moon-dark" cx="${cx}" cy="${cy}" r="${r}"/>` +
+         `<path class="moon-lit" d="${lit}"/></g>`;
+}
+
+function phaseName(p) {
+  if (p < 0.03 || p >= 0.97) return "Neumond";
+  if (p < 0.22) return "Zunehmende Sichel";
+  if (p < 0.28) return "Erstes Viertel";
+  if (p < 0.47) return "Zunehmender Mond";
+  if (p < 0.53) return "Vollmond";
+  if (p < 0.72) return "Abnehmender Mond";
+  if (p < 0.78) return "Letztes Viertel";
+  return "Abnehmende Sichel";
+}
+
+function moonWindow(now, lat, lon) {
+  const rises = [], sets = [];
+  for (let d = -1; d <= 1; d++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d);
+    const t = SunCalc.getMoonTimes(day, lat, lon);
+    if (t.rise) rises.push(t.rise);
+    if (t.set) sets.push(t.set);
+  }
+  rises.sort((a, b) => a - b); sets.sort((a, b) => a - b);
+  const up = SunCalc.getMoonPosition(now, lat, lon).altitude > 0;
+  const lastOf = (arr) => arr.filter(t => t <= now).pop();
+  const nextOf = (arr, from) => arr.find(t => t > from);
+
+  if (up) {
+    const rise = lastOf(rises), set = nextOf(sets, now);
+    const f = (rise && set) ? (now - rise) / (set - rise) : 0.5;
+    return { up, rise, set, f: clamp(f, 0, 1) };
+  }
+  const rise = nextOf(rises, now);
+  const set = rise ? nextOf(sets, rise) : undefined;
+  const lastSet = lastOf(sets);
+  // unter dem Horizont: am näheren Ende der Bahn andeuten
+  const justSet = lastSet && (!rise || (now - lastSet) < (rise - now));
+  return { up, rise, set, f: justSet ? 1 : 0 };
+}
+
+function updateAstro() {
+  const { lat, lon } = getCoords();
+  if (typeof SunCalc === "undefined") {
+    $("status").textContent = "Sonnen-/Mondzeiten nicht verfügbar (Bibliothek konnte nicht geladen werden).";
+    return;
+  }
+  const now = new Date();
+
+  // Sonne
+  const ref = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+  const sun = SunCalc.getTimes(ref, lat, lon);
+  $("sunrise").innerHTML = timeHtml(sun.sunrise);
+  $("sunset").innerHTML = timeHtml(sun.sunset);
+  let sf = 0, sdim = true;
+  if (sun.sunrise instanceof Date && !isNaN(sun.sunrise) && sun.sunset instanceof Date && !isNaN(sun.sunset)) {
+    if (now >= sun.sunrise && now <= sun.sunset) { sf = (now - sun.sunrise) / (sun.sunset - sun.sunrise); sdim = false; }
+    else sf = now > sun.sunset ? 1 : 0;
+  }
+  $("sunsvg").innerHTML = skyBase + sunBody(sf, sdim);
+
+  // Mond
+  const illum = SunCalc.getMoonIllumination(now);
+  const mw = moonWindow(now, lat, lon);
+  const mp = skyPos(mw.f);
+  $("moonsvg").innerHTML = skyBase + moonBody(mp.x, mp.y, 10, illum.phase, !mw.up);
+  $("moonrise").innerHTML = timeHtml(mw.rise);
+  $("moonset").innerHTML = timeHtml(mw.set);
+  $("moonphase").textContent = `${phaseName(illum.phase)} · ${Math.round(illum.fraction * 100)} % beleuchtet` +
+                               (mw.up ? "" : " · unter dem Horizont");
+}
+
+/* ---------- Dynamische Icons ---------- */
+const cloudShape = (tx, ty, s, dark) =>
+  `<g class="cloud${dark ? " dk" : ""}" transform="translate(${tx} ${ty}) scale(${s})">` +
+  `<circle cx="22" cy="40" r="8"/><circle cx="32" cy="33" r="11"/><circle cx="43" cy="38" r="9"/>` +
+  `<rect x="22" y="38" width="21" height="10"/></g>`;
+
+function sunShape(cx, cy, r) {
+  let rays = "";
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
+    rays += `<line x1="${(cx + (r + 4) * c).toFixed(1)}" y1="${(cy + (r + 4) * s).toFixed(1)}" ` +
+            `x2="${(cx + (r + 8) * c).toFixed(1)}" y2="${(cy + (r + 8) * s).toFixed(1)}"/>`;
+  }
+  return `<g class="rays" style="transform-origin:${cx}px ${cy}px">${rays}</g><circle class="sunc" cx="${cx}" cy="${cy}" r="${r}"/>`;
+}
+
+function rainDrops(n, y0) {
+  const xs = [22, 32, 42, 27, 37];
+  let s = "";
+  for (let i = 0; i < Math.min(n, 5); i++) {
+    const x = xs[i];
+    s += `<line class="rd" x1="${x}" y1="${y0}" x2="${x - 3}" y2="${y0 + 7}" style="animation-delay:${(i * 0.27).toFixed(2)}s"/>`;
+  }
+  return s;
+}
+function flakes(n, y0) {
+  const xs = [23, 33, 43, 28, 38];
+  let s = "";
+  for (let i = 0; i < Math.min(n, 5); i++)
+    s += `<circle class="flake" cx="${xs[i]}" cy="${y0 + (i % 2) * 3}" r="2.2" style="animation-delay:${(i * 0.5).toFixed(1)}s"/>`;
+  return s;
+}
+
+// kind: clear-day, clear-night, partly-cloudy-day, partly-cloudy-night, cloudy, fog, wind, rain, sleet, snow, hail, thunderstorm
+function weatherIcon(kind, phase, rainMm) {
+  switch (kind) {
+    case "clear-day": return sunShape(32, 32, 10);
+    case "clear-night": return moonBody(32, 32, 16, phase, false);
+    case "partly-cloudy-day": return sunShape(24, 24, 8) + cloudShape(8, 6, 1, false);
+    case "partly-cloudy-night": return moonBody(24, 24, 11, phase, false) + cloudShape(8, 6, 1, false);
+    case "cloudy": return cloudShape(-3, -5, 1.1, false);
+    case "fog":
+      return cloudShape(0, -6, 1, false) +
+        [49, 55, 61].map((y, i) => `<line class="fogl" x1="14" y1="${y}" x2="${50 - i * 4}" y2="${y}" style="animation-delay:${i * 0.6}s"/>`).join("");
+    case "wind":
+      return `<path class="windl" d="M8 24h30a6 6 0 1 0-6-6"/><path class="windl" d="M8 34h42a6 6 0 1 1-6 6" style="animation-delay:.5s"/>` +
+             `<path class="windl" d="M8 44h24" style="animation-delay:1s"/>`;
+    case "rain": {
+      const n = isNum(rainMm) ? (rainMm < 0.5 ? 2 : rainMm < 2.5 ? 3 : 5) : 3;
+      return cloudShape(0, -8, 1, true) + rainDrops(n, 44);
+    }
+    case "sleet": return cloudShape(0, -8, 1, true) + rainDrops(2, 44) + flakes(2, 50);
+    case "snow": return cloudShape(0, -8, 1, true) + flakes(5, 46);
+    case "hail":
+      return cloudShape(0, -8, 1, true) +
+        [24, 33, 42].map((x, i) => `<circle class="hail" cx="${x}" cy="${47 + (i % 2) * 3}" r="2.8" style="animation-delay:${i * 0.35}s"/>`).join("");
+    case "thunderstorm":
+      return cloudShape(0, -8, 1, true) +
+        `<polygon class="bolt" points="35,36 26,50 32,50 28,62 42,45 35,45 40,36"/>`;
+    default: return cloudShape(-3, -5, 1.1, false);
+  }
+}
+
+const WX_TEXT = {
+  "clear-day": "Sonnig", "clear-night": "Klar", "partly-cloudy-day": "Teils bewölkt", "partly-cloudy-night": "Teils bewölkt",
+  "cloudy": "Bewölkt", "fog": "Nebel", "wind": "Windig", "rain": "Regen", "sleet": "Schneeregen", "snow": "Schnee",
+  "hail": "Hagel", "thunderstorm": "Gewitter"
+};
+
+// Passendes Icon wählen; fehlt die Angabe der Station, wird es aus Bewölkung/Sicht abgeleitet
+function pickKind(w, day) {
+  const known = Object.keys(WX_TEXT);
+  if (w.icon && known.includes(w.icon)) return w.icon;
+  const c = w.condition;
+  if (["fog", "rain", "sleet", "snow", "hail", "thunderstorm"].includes(c)) return c;
+  if (isNum(w.visibility) && w.visibility < 1000) return "fog";
+  if (isNum(w.cloud_cover)) {
+    if (w.cloud_cover < 20) return day ? "clear-day" : "clear-night";
+    if (w.cloud_cover < 60) return day ? "partly-cloudy-day" : "partly-cloudy-night";
+    return "cloudy";
+  }
+  return null;
+}
+
+const cloudText = c => c < 10 ? "Wolkenlos" : c < 35 ? "Heiter" : c < 65 ? "Wolkig" : c < 90 ? "Stark bewölkt" : "Bedeckt";
+const precText = mm => mm < 0.1 ? "Kein Niederschlag" : mm < 2.5 ? "Leichter Niederschlag" : mm < 7.6 ? "Mäßiger Niederschlag" : "Starker Niederschlag";
+const visText = m => m < 1000 ? "Nebel" : m < 4000 ? "Dunst" : m < 10000 ? "Mäßige Sicht" : m < 20000 ? "Gute Sicht" : "Sehr gute Sicht";
+const dewText = d => d < 5 ? "Sehr trocken" : d < 10 ? "Trocken" : d < 16 ? "Angenehm" : d < 18 ? "Leicht schwül" : d < 21 ? "Schwül" : "Drückend schwül";
+
+function tempColor(t) {
+  return t < 0 ? "#3b82c4" : t < 12 ? "#5aa9d6" : t < 22 ? "#4fae7a" : t < 30 ? "#e0a02c" : "#d9534f";
+}
+
+function thermoShape(t) {
+  const p = clamp((t + 20) / 60, 0, 1), col = tempColor(t);
+  const h = 3 + p * 31, y = 44 - h;
+  return `<rect class="thermo-bg" x="27" y="8" width="10" height="40" rx="5"/><circle class="thermo-bg" cx="32" cy="50" r="9"/>` +
+         `<rect x="29.5" y="${y.toFixed(1)}" width="5" height="${(h + 4).toFixed(1)}" rx="2.5" fill="${col}"/>` +
+         `<circle cx="32" cy="50" r="6.5" fill="${col}"/>`;
+}
+
+function dropShape(td) {
+  const p = clamp(td / 24, 0, 1), y = (56 - p * 48).toFixed(1);
+  const col = td >= 18 ? "#e08a2c" : "var(--accent)";
+  const d = "M32 8C32 8 16 28 16 40a16 16 0 0 0 32 0C48 28 32 8 32 8Z";
+  return `<defs><clipPath id="dpclip"><path d="${d}"/></clipPath></defs><path class="drop-bg" d="${d}"/>` +
+         `<g clip-path="url(#dpclip)"><rect x="0" y="${y}" width="64" height="64" fill="${col}" opacity=".85"/></g>` +
+         `<path class="drop-ol" d="${d}"/>`;
+}
+
+function eyeShape(vis) {
+  const lines = vis < 1000 ? 3 : vis < 4000 ? 2 : vis < 10000 ? 1 : 0;
+  const ys = [26, 32, 38];
+  let haze = "";
+  for (let i = 0; i < lines; i++)
+    haze += `<line class="fogl" x1="10" y1="${ys[i]}" x2="54" y2="${ys[i]}" style="animation-delay:${i * 0.6}s"/>`;
+  return `<g opacity="${lines ? 0.55 : 1}"><path class="eye-ol" d="M6 32C16 18 48 18 58 32C48 46 16 46 6 32Z"/>` +
+         `<circle class="eye-pu" cx="32" cy="32" r="7"/></g>` + haze;
+}
+
+/* ---------- Berechnete Werte ---------- */
+// Gefühlte Temperatur nach Steadman (Apparent Temperature, ohne Strahlung)
+function apparentTemp(t, rh, windKmh) {
+  if (!isNum(t) || !isNum(rh)) return null;
+  const ws = (isNum(windKmh) ? windKmh : 0) / 3.6;
+  const e = rh / 100 * 6.105 * Math.exp(17.27 * t / (237.7 + t));
+  return t + 0.33 * e - 0.70 * ws - 4.00;
+}
+
+// Taupunkt (Magnus-Formel), falls die Station keinen liefert
+function dewPoint(t, rh) {
+  if (!isNum(t) || !isNum(rh) || rh <= 0) return null;
+  const a = 17.62, b = 243.12;
+  const g = Math.log(rh / 100) + a * t / (b + t);
+  return b * g / (a - g);
+}
+
+function isDayNow(lat, lon) {
+  if (typeof SunCalc !== "undefined") return SunCalc.getPosition(new Date(), lat, lon).altitude > 0;
+  const h = hourOf(Date.now());
+  return h >= 7 && h < 19;
+}
+
+function updateDerived(w, lat, lon) {
+  const day = isDayNow(lat, lon);
+  const phase = typeof SunCalc !== "undefined" ? SunCalc.getMoonIllumination(new Date()).phase : 0.5;
+
+  // Wetterlage
+  const kind = pickKind(w, day);
+  const p60 = w.precipitation_60;
+  $("wxicon").innerHTML = kind ? weatherIcon(kind, phase, p60) : "";
+  $("wxtext").textContent = kind ? WX_TEXT[kind] : "Keine Angabe";
+  const sub = [];
+  if (isNum(p60)) sub.push(precText(p60));
+  if (isNum(w.cloud_cover)) sub.push(cloudText(w.cloud_cover));
+  $("wxsub").textContent = sub.join(" · ");
+
+  // Gefühlte Temperatur
+  const ft = apparentTemp(w.temperature, w.relative_humidity, w.wind_speed_10);
+  $("ftemp").textContent = num(ft);
+  $("fticon").innerHTML = isNum(ft) ? thermoShape(ft) : "";
+  if (isNum(ft)) {
+    const d = ft - w.temperature;
+    $("ftempnote").textContent = d <= -1 ? "Wind lässt es kälter wirken" : d >= 1 ? "Feuchte lässt es wärmer wirken" : "Entspricht der Messung";
+  } else $("ftempnote").textContent = "";
+
+  // Taupunkt
+  const dp = isNum(w.dew_point) ? w.dew_point : dewPoint(w.temperature, w.relative_humidity);
+  $("dew").textContent = num(dp);
+  $("dewicon").innerHTML = isNum(dp) ? dropShape(dp) : "";
+  $("dewnote").textContent = isNum(dp) ? dewText(dp) : "";
+
+  // Bewölkung
+  const cc = w.cloud_cover;
+  $("cloud").textContent = num(cc, 0);
+  if (isNum(cc)) {
+    const ck = cc < 12.5 ? (day ? "clear-day" : "clear-night") : cc < 50 ? (day ? "partly-cloudy-day" : "partly-cloudy-night") : "cloudy";
+    $("cloudicon").innerHTML = weatherIcon(ck, phase);
+    $("cloudnote").textContent = cloudText(cc);
+  } else { $("cloudicon").innerHTML = ""; $("cloudnote").textContent = ""; }
+
+  // Sichtweite
+  const vis = w.visibility;
+  $("vis").textContent = !isNum(vis) ? "–" : vis >= 10000 ? num(vis / 1000, 0) : num(vis / 1000, 1);
+  $("visicon").innerHTML = isNum(vis) ? eyeShape(vis) : "";
+  $("visnote").textContent = isNum(vis) ? visText(vis) : "";
+
+  // Niederschlag
+  $("prec").textContent = num(p60, 1);
+  $("precicon").innerHTML = isNum(p60) && p60 >= 0.1 ? weatherIcon("rain", phase, p60) : cloudShape(-3, -5, 1.1, false);
+  $("precnote").textContent = isNum(p60) ? precText(p60) : "Keine Angabe";
+}
+
+/* ---------- Aktuelle Messwerte ---------- */
+async function load() {
+  const { lat, lon } = getCoords();
+  const status = $("status");
+  status.className = "";
+  status.textContent = "Aktualisiere …";
+  lastLoad = Date.now();
+  updateAstro();
+  try {
+    const res = await fetch(`https://api.brightsky.dev/current_weather?lat=${lat}&lon=${lon}&tz=${encodeURIComponent(TZ)}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const w = data.weather;
+    const src = (data.sources || [])[0] || {};
+
+    $("temp").textContent = $("wtemp").textContent = num(w.temperature);
+    $("hum").textContent = $("whum").textContent = num(w.relative_humidity, 0);
+    $("pres").textContent = $("wpres").textContent = num(w.pressure_msl);
+    $("wspeed").textContent = num(w.wind_speed_10);
+
+    const dir = w.wind_direction_10;
+    if (isNum(dir)) {
+      $("wdir").textContent = `${compass(dir)} (${Math.round(dir)}°)`;
+      // Pfeil zeigt, wohin der Wind weht (Windrichtung = Herkunft)
+      $("warrow").style.transform = `rotate(${dir + 180}deg)`;
+    } else {
+      $("wdir").textContent = "–";
+    }
+
+    // Strahlung: kWh/m² pro Zeitraum -> mittlere Leistung in W/m²
+    let rad = null, note = "";
+    if (isNum(w.solar_10)) { rad = w.solar_10 * 6000; note = "Mittel der letzten 10 Minuten"; }
+    else if (isNum(w.solar_60)) { rad = w.solar_60 * 1000; note = "Mittel der letzten Stunde"; }
+    $("rad").textContent = rad === null ? "–" : num(rad, 0);
+    $("radnote").textContent = note || "Keine Strahlungsdaten verfügbar (nachts oder Station ohne Sensor)";
+
+    updateDerived(w, lat, lon);
+
+    const ts = new Date(w.timestamp);
+    const dist = isNum(src.distance) ? ` · ${(src.distance / 1000).toFixed(1).replace(".", ",")} km entfernt` : "";
+    $("station").textContent = `Station: ${src.station_name || "unbekannt"}${dist} · Messung von ${ts.toLocaleString("de-DE", { timeZone: TZ, dateStyle: "short", timeStyle: "short" })} Uhr`;
+    status.textContent = "Zuletzt abgerufen: " + clockStr(new Date());
+
+    try { await loadHistory(lat, lon, w); }
+    catch (e) { status.className = "err"; status.textContent = "Verlauf konnte nicht geladen werden: " + e.message; }
+  } catch (e) {
+    status.className = "err";
+    status.textContent = "Fehler beim Laden der Wetterdaten: " + e.message;
+  }
+}
+
+$("loc").addEventListener("submit", e => { e.preventDefault(); load(); });
+load();
+setInterval(load, 10 * 60 * 1000);   // Messwerte alle 10 Minuten
+setInterval(updateAstro, 60 * 1000); // Sonne/Mond jede Minute
+
+// Beim Zurückkehren in die App neu laden, wenn die Daten älter als 2 Minuten sind
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && Date.now() - lastLoad > 2 * 60 * 1000) load();
+});
+
+// Service Worker für die Installation als App (nur über HTTPS bzw. localhost)
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
