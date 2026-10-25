@@ -1,6 +1,6 @@
 // Service Worker: legt die App-Dateien zwischen, damit die Oberfläche schnell und auch offline startet.
 // Wetterdaten (api.brightsky.dev) werden nie zwischengespeichert, sondern immer live geladen.
-const CACHE = "wetter-v1";
+const CACHE = "wetter-v3";
 const FILES = ["./", "index.html", "manifest.webmanifest", "suncalc.js", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", event => {
